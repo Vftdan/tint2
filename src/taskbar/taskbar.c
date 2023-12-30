@@ -35,6 +35,9 @@
 #include "tooltip.h"
 
 GHashTable *win_to_task;
+GHashTable *task_to_group;
+gpointer (*task_group_key_generator) (Task *task);
+void (*task_group_key_free) (gpointer key);
 
 Task *active_task;
 Task *task_drag;
@@ -46,6 +49,7 @@ gboolean hide_task_diff_monitor;
 gboolean hide_taskbar_if_empty;
 gboolean always_show_all_desktop_tasks;
 TaskbarSortMethod taskbar_sort_method;
+TaskbarGroupMethod taskbar_group_method;
 Alignment taskbar_alignment;
 static Timer thumbnail_update_timer_all;
 static Timer thumbnail_update_timer_active;
@@ -80,6 +84,8 @@ void free_ptr_array(gpointer data)
 void default_taskbar()
 {
     win_to_task = NULL;
+    task_to_group = NULL;
+    task_group_key_generator = NULL;
     urgent_list = NULL;
     taskbar_enabled = FALSE;
     taskbar_distribute_size = FALSE;
@@ -90,6 +96,7 @@ void default_taskbar()
     always_show_all_desktop_tasks = FALSE;
     taskbar_thumbnail_jobs_done = NULL;
     taskbar_sort_method = TASKBAR_NOSORT;
+    taskbar_group_method = TASKBAR_NOGROUP;
     taskbar_alignment = ALIGN_LEFT;
     default_taskbarname();
 }
@@ -148,6 +155,10 @@ void cleanup_taskbar()
         g_hash_table_destroy(win_to_task);
         win_to_task = NULL;
     }
+    if (task_to_group) {
+        g_hash_table_destroy(task_to_group);
+        task_to_group = NULL;
+    }
     cleanup_taskbarname();
     for (int i = 0; i < num_panels; i++) {
         Panel *panel = &panels[i];
@@ -178,6 +189,28 @@ void cleanup_taskbar()
     }
 }
 
+static gpointer task_application_key_func(Task *task)
+{
+    DeskPtrKey *key = calloc(1, sizeof(DeskPtrKey));
+    key->desktop = task->desktop;
+    key->ptr = strdup(task->application ? task->application : "");
+    return key;
+}
+
+static void desk_ptr_key_owned_free(gpointer obj)
+{
+    DeskPtrKey *key = obj;
+    free(key->ptr);
+    free(key);
+}
+
+static guint desk_str_hash(gconstpointer obj)
+{
+    const DeskPtrKey *key = obj;
+    guint hash = g_str_hash(key->ptr);
+    return hash ^ key->desktop;
+}
+
 void init_taskbar()
 {
     INIT_TIMER(urgent_timer);
@@ -194,6 +227,21 @@ void init_taskbar()
 
     if (!win_to_task)
         win_to_task = g_hash_table_new_full(win_hash, win_compare, free, free_ptr_array);
+
+    switch (taskbar_group_method) {
+    case TASKBAR_NOGROUP:
+        if (task_to_group) {
+            g_hash_table_destroy(task_to_group);
+            task_to_group = NULL;
+        }
+        task_group_key_generator = NULL;
+        task_group_key_free = NULL;
+        break;
+    case TASKBAR_GROUP_APPLICATION:
+        if (!task_to_group)
+            task_to_group = g_hash_table_new_full(desk_str_hash, g_str_equal, (task_group_key_free = desk_ptr_key_owned_free), remove_task_group);
+        task_group_key_generator = task_application_key_func;
+    }
 
     active_task = 0;
     task_drag = 0;
@@ -668,11 +716,11 @@ void set_taskbar_state(Taskbar *taskbar, TaskbarState state)
 }
 
 #define NONTRIVIAL 2
-gint compare_tasks_trivial(Task *a, Task *b, Taskbar *taskbar)
+gint compare_tasks_trivial(Task *a, Task *b, TaskbarOrGroupMenu *taskbar, gboolean is_taskbar)
 {
     if (a == b)
         return 0;
-    if (taskbarname_enabled) {
+    if (taskbarname_enabled && is_taskbar) {
         if (a == taskbar->area.children->data)
             return -1;
         if (b == taskbar->area.children->data)
@@ -690,9 +738,9 @@ gboolean contained_within(Task *a, Task *b)
     return FALSE;
 }
 
-gint compare_task_centers(Task *a, Task *b, Taskbar *taskbar)
+gint compare_task_centers(Task *a, Task *b, TaskbarOrGroupMenu *taskbar, gboolean is_taskbar)
 {
-    int trivial = compare_tasks_trivial(a, b, taskbar);
+    int trivial = compare_tasks_trivial(a, b, taskbar, is_taskbar);
     if (trivial != NONTRIVIAL)
         return trivial;
 
@@ -727,35 +775,35 @@ gint compare_task_centers(Task *a, Task *b, Taskbar *taskbar)
     }
 }
 
-gint compare_task_titles(Task *a, Task *b, Taskbar *taskbar)
+gint compare_task_titles(Task *a, Task *b, TaskbarOrGroupMenu *taskbar, gboolean is_taskbar)
 {
-    int trivial = compare_tasks_trivial(a, b, taskbar);
+    int trivial = compare_tasks_trivial(a, b, taskbar, is_taskbar);
     if (trivial != NONTRIVIAL)
         return trivial;
     return strnatcasecmp(a->title ? a->title : "", b->title ? b->title : "");
 }
 
-gint compare_task_applications(Task *a, Task *b, Taskbar *taskbar)
+gint compare_task_applications(Task *a, Task *b, TaskbarOrGroupMenu *taskbar, gboolean is_taskbar)
 {
-    int trivial = compare_tasks_trivial(a, b, taskbar);
+    int trivial = compare_tasks_trivial(a, b, taskbar, is_taskbar);
     if (trivial != NONTRIVIAL)
         return trivial;
     return strnatcasecmp(a->application ? a->application : "", b->application ? b->application : "");
 }
 
-gint compare_tasks(Task *a, Task *b, Taskbar *taskbar)
+gint compare_tasks(Task *a, Task *b, TaskbarOrGroupMenu *taskbar, gboolean is_taskbar)
 {
-    int trivial = compare_tasks_trivial(a, b, taskbar);
+    int trivial = compare_tasks_trivial(a, b, taskbar, is_taskbar);
     if (trivial != NONTRIVIAL)
         return trivial;
     if (taskbar_sort_method == TASKBAR_NOSORT) {
         return 0;
     } else if (taskbar_sort_method == TASKBAR_SORT_CENTER) {
-        return compare_task_centers(a, b, taskbar);
+        return compare_task_centers(a, b, taskbar, is_taskbar);
     } else if (taskbar_sort_method == TASKBAR_SORT_TITLE) {
-        return compare_task_titles(a, b, taskbar);
+        return compare_task_titles(a, b, taskbar, is_taskbar);
     } else if (taskbar_sort_method == TASKBAR_SORT_APPLICATION) {
-        return compare_task_applications(a, b, taskbar);
+        return compare_task_applications(a, b, taskbar, is_taskbar);
     } else if (taskbar_sort_method == TASKBAR_SORT_LRU) {
         return compare_timespecs(&a->last_activation_time, &b->last_activation_time);
     } else if (taskbar_sort_method == TASKBAR_SORT_MRU) {
@@ -764,13 +812,23 @@ gint compare_tasks(Task *a, Task *b, Taskbar *taskbar)
     return 0;
 }
 
-gboolean taskbar_needs_sort(Taskbar *taskbar)
+gint compare_tasks_taskbar(Task *a, Task *b, void *taskbar)
+{
+    return compare_tasks(a, b, taskbar, TRUE);
+}
+
+gint compare_tasks_group_menu(Task *a, Task *b, void *group_menu)
+{
+    return compare_tasks(a, b, group_menu, FALSE);
+}
+
+gboolean taskbar_needs_sort(TaskbarOrGroupMenu *taskbar, gboolean is_taskbar)
 {
     if (taskbar_sort_method == TASKBAR_NOSORT)
         return FALSE;
 
     for (GList *i = taskbar->area.children, *j = i ? i->next : NULL; i && j; i = i->next, j = j->next) {
-        if (compare_tasks(i->data, j->data, taskbar) > 0) {
+        if (compare_tasks(i->data, j->data, taskbar, is_taskbar) > 0) {
             return TRUE;
         }
     }
@@ -778,14 +836,16 @@ gboolean taskbar_needs_sort(Taskbar *taskbar)
     return FALSE;
 }
 
-void sort_tasks(Taskbar *taskbar)
+void sort_tasks(TaskbarOrGroupMenu *taskbar, gboolean is_taskbar)
 {
     if (!taskbar)
         return;
-    if (!taskbar_needs_sort(taskbar))
+    if (!taskbar_needs_sort(taskbar, is_taskbar))
         return;
 
-    taskbar->area.children = g_list_sort_with_data(taskbar->area.children, (GCompareDataFunc)compare_tasks, taskbar);
+    taskbar->area.children = g_list_sort_with_data(taskbar->area.children,
+            (GCompareDataFunc)(is_taskbar ? compare_tasks_taskbar : compare_tasks_group_menu),
+            taskbar);
     taskbar->area.resize_needed = TRUE;
     schedule_panel_redraw();
     ((Panel *)taskbar->area.panel)->area.resize_needed = TRUE;
@@ -804,11 +864,42 @@ void sort_taskbar_for_win(Window win)
         }
         for (int i = 0; i < task_buttons->len; ++i) {
             Task *task = g_ptr_array_index(task_buttons, i);
-            task->win_x = task0->win_x;
-            task->win_y = task0->win_y;
-            task->win_w = task0->win_w;
-            task->win_h = task0->win_h;
-            sort_tasks(task->area.parent);
+            while (task) {
+                task->win_x = task0->win_x;
+                task->win_y = task0->win_y;
+                task->win_w = task0->win_w;
+                task->win_h = task0->win_h;
+                sort_tasks(task->area.parent, !task->group);
+                task = task->group;
+            }
+        }
+    }
+}
+
+void group_taskbuttons_for_win(Window win)
+{
+    if (taskbar_group_method == TASKBAR_NOGROUP || !task_to_group || !task_group_key_generator || !task_group_key_free)
+        return;
+
+    GPtrArray *task_buttons = get_task_buttons(win);
+    if (task_buttons) {
+        for (int i = 0; i < task_buttons->len; ++i) {
+            // TODO should we be able to also group groups (potentially multi-level grouping)?
+            Task *task = g_ptr_array_index(task_buttons, i);
+            if (!task->grouping_enabled)
+                continue;
+            gpointer key = task_group_key_generator(task);
+            Task *task_group = g_hash_table_lookup(task_to_group, key);
+            if (!task_group) {
+                task_group_remove_task(NULL, task);
+                // Using replace instead of insert to transfer key ownership
+                g_hash_table_replace(task_to_group, key, (task_group = add_task_group(task, -1, -1, key)));
+            } else {
+                if (task_group == task->group)
+                    continue;
+                task_group_add_task(task_group, task);
+                task_group_key_free(key);
+            }
         }
     }
 }

@@ -38,6 +38,11 @@ extern MouseAction mouse_scroll_up;
 extern MouseAction mouse_scroll_down;
 extern MouseAction mouse_tilt_left;
 extern MouseAction mouse_tilt_right;
+extern MouseAction group_mouse_left;
+extern MouseAction group_mouse_middle;
+extern MouseAction group_mouse_right;
+extern MouseAction group_mouse_scroll_up;
+extern MouseAction group_mouse_scroll_down;
 
 // panel mode
 typedef enum TaskbarMode {
@@ -188,7 +193,7 @@ void set_panel_background(Panel *p);
 Panel *get_panel(Window win);
 
 Taskbar *click_taskbar(Panel *panel, int x, int y);
-Task *click_task(Panel *panel, int x, int y);
+Task *click_task(Panel *panel, int x, int y, Window win);
 Launcher *click_launcher(Panel *panel, int x, int y);
 LauncherIcon *click_launcher_icon(Panel *panel, int x, int y);
 Clock *click_clock(Panel *panel, int x, int y);

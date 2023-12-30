@@ -33,7 +33,11 @@ typedef enum MouseAction {
     DESKTOP_LEFT,
     DESKTOP_RIGHT,
     NEXT_TASK,
-    PREV_TASK
+    PREV_TASK,
+    TOGGLE_GROUP_MENU,
+    GROUP_NEXT_TASK,
+    GROUP_PREV_TASK,
+    TOGGLE_GROUPABLE,
 } MouseAction;
 
 #define ALL_DESKTOPS 0xFFFFFFFF

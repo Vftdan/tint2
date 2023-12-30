@@ -118,6 +118,14 @@ void get_action(char *event, MouseAction *action)
         *action = NEXT_TASK;
     else if (strcmp(event, "prev_task") == 0)
         *action = PREV_TASK;
+    else if (strcmp(event, "toggle_group_menu") == 0)
+        *action = TOGGLE_GROUP_MENU;
+    else if (strcmp(event, "group_next_task") == 0)
+        *action = GROUP_NEXT_TASK;
+    else if (strcmp(event, "group_prev_task") == 0)
+        *action = GROUP_PREV_TASK;
+    else if (strcmp(event, "toggle_groupable") == 0)
+        *action = TOGGLE_GROUPABLE;
     else
         fprintf(stderr, "tint2: Error: unrecognized action '%s'. Please fix your config file.\n", event);
 }
@@ -1030,6 +1038,12 @@ void add_entry(char *key, char *value)
         } else {
             taskbar_sort_method = TASKBAR_NOSORT;
         }
+    } else if (strcmp(key, "taskbar_group") == 0) {
+        if (strcmp(value, "application") == 0) {
+            taskbar_group_method = TASKBAR_GROUP_APPLICATION;
+        } else {
+            taskbar_group_method = TASKBAR_NOGROUP;
+        }
     } else if (strcmp(key, "task_align") == 0) {
         if (strcmp(value, "center") == 0) {
             taskbar_alignment = ALIGN_CENTER;
@@ -1115,6 +1129,27 @@ void add_entry(char *key, char *value)
         panel_config.g_task.thumbnail_enabled = atoi(value);
     else if (strcmp(key, "task_thumbnail_size") == 0)
         panel_config.g_task.thumbnail_width = MAX(8, atoi(value));
+    else if (strcmp(key, "task_default_groupable") == 0)
+        panel_config.g_task.grouping_enabled = atoi(value);
+    else if (strcmp(key, "group_menu_background_id") == 0) {
+        int id = atoi(value);
+        id = (id < backgrounds->len && id >= 0) ? id : 0;
+        g_task_group_menu_style.bg = &g_array_index(backgrounds, Background, id);
+    } else if (strcmp(key, "group_menu_outer_padding") == 0) {
+        char **tokens = g_strsplit(value, " ", 2);
+        if (tokens[0]) {
+            g_task_group_menu_style.paddingx = atoi(tokens[0]);
+            if (tokens[1])
+                g_task_group_menu_style.paddingy = atoi(tokens[1]);
+            else
+                g_task_group_menu_style.paddingy = g_task_group_menu_style.paddingx;
+        }
+        g_strfreev(tokens);
+    } else if (strcmp(key, "group_menu_spacing") == 0) {
+        g_task_group_menu_style.spacing = atoi(value);
+    } else if (strcmp(key, "group_menu_direction") == 0) {
+        g_task_group_menu_style.horizontal = strcmp(value, "vertical") != 0;
+    }
 
     /* Systray */
     else if (strcmp(key, "systray_padding") == 0) {
@@ -1247,6 +1282,16 @@ void add_entry(char *key, char *value)
         get_action(value, &mouse_scroll_up);
     else if (strcmp(key, "mouse_scroll_down") == 0)
         get_action(value, &mouse_scroll_down);
+    else if (strcmp(key, "group_mouse_left") == 0)
+        get_action(value, &group_mouse_left);
+    else if (strcmp(key, "group_mouse_middle") == 0)
+        get_action(value, &group_mouse_middle);
+    else if (strcmp(key, "group_mouse_right") == 0)
+        get_action(value, &group_mouse_right);
+    else if (strcmp(key, "group_mouse_scroll_up") == 0)
+        get_action(value, &group_mouse_scroll_up);
+    else if (strcmp(key, "group_mouse_scroll_down") == 0)
+        get_action(value, &group_mouse_scroll_down);
     else if (strcmp(key, "mouse_effects") == 0)
         panel_config.mouse_effects = atoi(value);
     else if (strcmp(key, "mouse_hover_icon_asb") == 0) {

@@ -419,12 +419,28 @@ void handle_x_event(XEvent *e)
     if (handle_x_event_autohide(e))
         return;
 
-    Panel *panel = get_panel(e->xany.window);
+    Window win = e->xany.window;
+    Panel *panel = get_panel(win);
+    TaskGroupMenu *group_menu = task_group_menu_from_xwin(win);
+    Area *win_root_area = panel ? &panel->area : &group_menu->area;
+    if (!panel && group_menu)
+        panel = group_menu->panel;
+
     switch (e->type) {
     case ButtonPress: {
         tooltip_hide(0);
         handle_mouse_press_event(e);
-        Area *area = find_area_under_mouse(panel, e->xbutton.x, e->xbutton.y);
+        // This is currently redundant, but can be needed in the future
+        group_menu = task_group_menu_from_xwin(win);
+        if (win != panel->main_win) {
+            if (group_menu) {
+                win_root_area = &group_menu->area;
+            } else {
+                win_root_area = NULL;
+                break;
+            }
+        }
+        Area *area = find_area_under_mouse(win_root_area, e->xbutton.x, e->xbutton.y);
         if (panel_config.mouse_effects)
             mouse_over(area, TRUE);
         break;
@@ -432,7 +448,17 @@ void handle_x_event(XEvent *e)
 
     case ButtonRelease: {
         handle_mouse_release_event(e);
-        Area *area = find_area_under_mouse(panel, e->xbutton.x, e->xbutton.y);
+        // Group menu could have been deleted, so win_root_are may now be a dangling pointer
+        group_menu = task_group_menu_from_xwin(win);
+        if (win != panel->main_win) {
+            if (group_menu) {
+                win_root_area = &group_menu->area;
+            } else {
+                win_root_area = NULL;
+                break;
+            }
+        }
+        Area *area = find_area_under_mouse(win_root_area, e->xbutton.x, e->xbutton.y);
         if (panel_config.mouse_effects)
             mouse_over(area, FALSE);
         break;
@@ -442,8 +468,18 @@ void handle_x_event(XEvent *e)
         unsigned int button_mask = Button1Mask | Button2Mask | Button3Mask | Button4Mask | Button5Mask;
         if (e->xmotion.state & button_mask)
             handle_mouse_move_event(e);
+        // This is currently redundant, but can be needed in the future
+        group_menu = task_group_menu_from_xwin(win);
+        if (win != panel->main_win) {
+            if (group_menu) {
+                win_root_area = &group_menu->area;
+            } else {
+                win_root_area = NULL;
+                break;
+            }
+        }
 
-        Area *area = find_area_under_mouse(panel, e->xmotion.x, e->xmotion.y);
+        Area *area = find_area_under_mouse(win_root_area, e->xmotion.x, e->xmotion.y);
         if (area->_get_tooltip_text)
             tooltip_trigger_show(area, panel, e);
         else

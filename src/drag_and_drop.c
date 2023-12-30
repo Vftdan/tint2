@@ -217,12 +217,15 @@ void handle_dnd_position(XClientMessageEvent *e)
     dnd_target_window = e->window;
     int accept = 0;
     Panel *panel = get_panel(e->window);
+    TaskGroupMenu *group_menu = task_group_menu_from_xwin(e->window);
+    if (!panel && group_menu)
+        panel = group_menu->panel;
     int x, y, mapX, mapY;
     Window child;
     x = (e->data.l[2] >> 16) & 0xFFFF;
     y = e->data.l[2] & 0xFFFF;
     XTranslateCoordinates(server.display, server.root_win, e->window, x, y, &mapX, &mapY, &child);
-    Task *task = click_task(panel, mapX, mapY);
+    Task *task = click_task(panel, mapX, mapY, e->window);
     if (task) {
         if (task->desktop != server.desktop)
             change_desktop(task->desktop);

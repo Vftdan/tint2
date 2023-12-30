@@ -10,6 +10,7 @@
 
 #include "task.h"
 #include "taskbarname.h"
+#include "taskgroupmenu.h"
 
 typedef enum TaskbarState {
     TASKBAR_NORMAL = 0,
@@ -25,6 +26,11 @@ typedef enum TaskbarSortMethod {
     TASKBAR_SORT_LRU,
     TASKBAR_SORT_MRU,
 } TaskbarSortMethod;
+
+typedef enum TaskbarGroupMethod {
+    TASKBAR_NOGROUP = 0,
+    TASKBAR_GROUP_APPLICATION,
+} TaskbarGroupMethod;
 
 typedef enum ThumbnailUpdateMode {
     THUMB_MODE_ACTIVE_WINDOW = 0,
@@ -45,6 +51,17 @@ typedef struct {
     int text_width;
 } Taskbar;
 
+typedef union {
+    Taskbar taskbar;
+    TaskGroupMenu group_menu;
+    Area area;
+} TaskbarOrGroupMenu;
+
+typedef struct {
+    int desktop;
+    gpointer ptr;
+} DeskPtrKey;
+
 typedef struct GlobalTaskbar {
     Area area;
     Area area_name;
@@ -62,6 +79,7 @@ extern gboolean hide_task_diff_monitor;
 extern gboolean hide_taskbar_if_empty;
 extern gboolean always_show_all_desktop_tasks;
 extern TaskbarSortMethod taskbar_sort_method;
+extern TaskbarGroupMethod taskbar_group_method;
 extern Alignment taskbar_alignment;
 
 // win_to_task holds for every Window an array of tasks. Usually the array contains only one
@@ -71,6 +89,11 @@ extern GHashTable *win_to_task;
 
 extern Task *active_task;
 extern Task *task_drag;
+
+// Actually uses result of task_group_key_generator as keys
+extern GHashTable *task_to_group;
+extern gpointer (*task_group_key_generator) (Task *task);
+extern void (*task_group_key_free) (gpointer key);
 
 void default_taskbar();
 void cleanup_taskbar();
@@ -102,7 +125,10 @@ void update_minimized_icon_positions(void *p);
 // Sorts the taskbar(s) on which the window is present.
 void sort_taskbar_for_win(Window win);
 
-void sort_tasks(Taskbar *taskbar);
+void sort_tasks(TaskbarOrGroupMenu *taskbar, gboolean is_taskbar);
+
+// Moves task buttons of the window into a group.
+void group_taskbuttons_for_win(Window win);
 
 gboolean taskbar_is_under_mouse(void *obj, int x, int y);
 

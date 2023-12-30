@@ -145,6 +145,7 @@ set( SOURCES src/config.c
              src/taskbar/task.c
              src/taskbar/taskbar.c
              src/taskbar/taskbarname.c
+             src/taskbar/taskgroupmenu.c
              src/tooltip/tooltip.c
              src/execplugin/execplugin.c
              src/button/button.c

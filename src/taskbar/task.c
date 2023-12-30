@@ -60,6 +60,8 @@ cairo_surface_t *task_get_thumbnail(void *obj)
     return t->thumbnail;
 }
 
+static void task_group_update_recursive(Task *task_group);
+
 Task *add_task(Window win)
 {
     if (!win)
@@ -162,6 +164,7 @@ Task *add_task(Window win)
         }
         task_instance->icon_width = task_template.icon_width;
         task_instance->icon_height = task_template.icon_height;
+        task_instance->grouping_enabled = panels[monitor].g_task.grouping_enabled;
 
         add_area(&task_instance->area, &taskbar->area);
         g_ptr_array_add(task_buttons, task_instance);
@@ -173,6 +176,7 @@ Task *add_task(Window win)
     set_task_state((Task *)g_ptr_array_index(task_buttons, 0), task_template.current_state);
 
     sort_taskbar_for_win(win);
+    group_taskbuttons_for_win(win);
 
     if (taskbar_mode == MULTI_DESKTOP) {
         Panel *panel = (Panel *)task_template.area.panel;
@@ -210,12 +214,21 @@ void task_remove_icon(Task *task)
             task->icon_press[k] = 0;
         }
     }
+    task_group_update_recursive(task->group);
 }
+
 
 void remove_task(Task *task)
 {
     if (!task)
         return;
+
+    if (task->is_group) {
+        remove_task_group(task);
+        return;
+    }
+    while (task->group)
+        task_group_remove_task(task->group, task);
 
     if (taskbar_mode == MULTI_DESKTOP) {
         Panel *panel = task->area.panel;
@@ -251,6 +264,260 @@ void remove_task(Task *task)
     g_hash_table_remove(win_to_task, &win);
     if (hide_taskbar_if_empty)
         update_all_taskbars_visibility();
+}
+
+void remove_task_group(gpointer task_group_gptr)
+{
+    Task *task_group = task_group_gptr;
+    if (!task_group)
+        return;
+    gpointer key = task_group->group_lookup_key;
+    if (!key)
+        return;  // it is already being deleted
+    task_group->group_lookup_key = NULL;
+
+    GList* l;
+    while ((l = *task_group->group_tasks)) {
+        Task *element = l->data;
+        task_group_remove_task(task_group, element);
+    }
+
+    if (taskbar_mode == MULTI_DESKTOP) {
+        Panel *panel = task_group->area.panel;
+        panel->area.resize_needed = 1;
+    }
+    if (g_tooltip.area == &task_group->area)
+        tooltip_hide(NULL);
+    
+    while (task_group->group)
+        task_group_remove_task(NULL, task_group);
+
+    task_group->group_tasks = NULL;
+    remove_task_group_menu(task_group->group_menu);
+    task_group->group_menu = NULL;
+
+    if (task_group->application)
+        free(task_group->application);
+    task_group->application = NULL;
+    if (task_group->title)
+        free(task_group->title);
+    task_group->title = NULL;
+
+    remove_area((Area *)task_group);
+
+    g_hash_table_remove(task_to_group, key);
+    free(task_group);
+
+    if (hide_taskbar_if_empty)
+        update_all_taskbars_visibility();
+}
+
+static gboolean task_group_update(Task *task_group)
+{
+    guint length = g_list_length(*task_group->group_tasks);
+    guint index = 0;
+    if (length == 0) {
+        remove_task_group(task_group);
+        return FALSE;
+    }
+    GList *l = *task_group->group_tasks;
+    struct timespec max_last_activation_time = ((Task *)l->data)->last_activation_time;
+    gboolean has_active = FALSE;
+    gboolean has_urgent = FALSE;
+    gboolean all_iconified = TRUE;
+    gboolean has_on_screen = FALSE;
+    for (guint i = 0; l; ++i, l = l->next) {
+        Task *task = l->data;
+        if (compare_timespecs(&max_last_activation_time, &task->last_activation_time) < 0) {
+            max_last_activation_time = task->last_activation_time;
+            index = i;
+        }
+        switch (task->current_state) {
+        case TASK_ICONIFIED:
+            break;
+        case TASK_URGENT:
+            has_urgent = TRUE;
+            break;
+        case TASK_ACTIVE:
+            has_active = TRUE;
+        case TASK_NORMAL:
+            all_iconified = FALSE;
+        default:
+            break;
+        }
+        if (task->area.on_screen)
+            has_on_screen = TRUE;
+    }
+
+    if (has_urgent)
+        task_group->current_state = TASK_URGENT;
+    else if (has_active)
+        task_group->current_state = TASK_ACTIVE;
+    else if (all_iconified)
+        task_group->current_state = TASK_ICONIFIED;
+    else
+        task_group->current_state = TASK_NORMAL;
+    task_group->area.bg = panels[0].g_task.background[task_group->current_state];
+    task_group->area.on_screen = has_on_screen;
+
+    task_group->group_last_index = index;
+    Task* element = g_list_nth(*task_group->group_tasks, index)->data;
+    task_group->win = element->win;
+    task_group->win_x = element->win_x;
+    task_group->win_y = element->win_y;
+    task_group->win_w = element->win_w;
+    task_group->win_h = element->win_h;
+    // Should we use .application instead?
+    // TODO consider creating configurable format string
+    if (task_group->title)
+        free(task_group->title);
+    size_t title_len = strlen(element->title) + 8;
+    task_group->title = calloc(title_len, sizeof(char));
+    snprintf(task_group->title, title_len, "[%d] %s", g_list_length(*task_group->group_tasks), element->title);  // TODO recursive size
+    if (task_group->application)
+        free(task_group->application);
+    task_group->application = strdup(element->application);
+    task_group->icon_color = element->icon_color;
+    task_group->icon_color_hover = element->icon_color_hover;
+    task_group->icon_color_press = element->icon_color_press;
+    for (int k = 0; k < TASK_STATE_COUNT; ++k) {
+        // Don't own the data, leave dangling pointers if task_group_update is not called
+        task_group->icon[k] = element->icon[k];
+        task_group->icon_hover[k] = element->icon_hover[k];
+        task_group->icon_press[k] = element->icon_press[k];
+    }
+    task_group->icon_width = element->icon_width;
+    task_group->icon_height = element->icon_height;
+    task_group->last_activation_time = element->last_activation_time;
+    task_group->thumbnail = element->thumbnail;
+
+    free_area_gradient_instances(&task_group->area);
+    instantiate_area_gradients(&task_group->area);
+    schedule_redraw(&task_group->area);
+    task_group->group_menu->dirty = TRUE;
+    schedule_panel_redraw();
+    return TRUE;
+}
+
+void task_group_update_recursive(Task *task_group)
+{
+    while (task_group != NULL) {
+        if (!task_group_update(task_group))
+            break;
+        task_group = task_group->group;
+    }
+    schedule_panel_redraw();
+}
+
+Task *add_task_group(Task *element, int monitor, int desktop, gpointer lookup_key)
+{
+    if (!element)
+        return NULL;
+    if (!lookup_key)
+        return NULL;
+
+    if (monitor < 0)
+        monitor = get_window_monitor(element->win);
+    if (monitor >= num_panels)
+        monitor = 0;
+
+    if (desktop < 0)
+        desktop = element->desktop;
+    if (desktop == ALL_DESKTOPS)
+        desktop = 0;
+
+    Task *task_group = calloc(1, sizeof(Task));
+    memcpy(&task_group->area, &panels[monitor].g_task.area, sizeof(Area));
+    snprintf(task_group->area.name, sizeof(task_group->area.name), "Task group %d %d %s", monitor, desktop, element->application ? element->application : "");
+    task_group->area.has_mouse_over_effect = panel_config.mouse_effects;
+    task_group->area.has_mouse_press_effect = panel_config.mouse_effects;
+    task_group->area._dump_geometry = task_dump_geometry;
+    task_group->area._is_under_mouse = full_width_area_is_under_mouse;
+    task_group->area._compute_desired_size = task_compute_desired_size;
+    task_group->area._get_content_color = task_get_content_color;
+    task_group->area.panel = &panels[monitor];
+    task_group->desktop = desktop;
+    task_group->is_group = TRUE;
+    if (panels[monitor].g_task.tooltip_enabled) {
+        task_group->area._get_tooltip_text = task_get_tooltip;
+        task_group->area._get_tooltip_image = task_get_thumbnail;
+    }
+    task_group->grouping_enabled = panels[monitor].g_task.grouping_enabled;
+    task_group->group_lookup_key = lookup_key;
+
+    TaskGroupMenu *menu = add_task_group_menu(task_group);
+
+    if (element->group) {
+        task_group_add_task(element->group, task_group);
+        task_group_remove_task(element->group, element);
+    } else {
+        add_area(&task_group->area, element->area.parent);
+    }
+    task_group->group_tasks = &menu->area.children;
+    task_group_add_task(task_group, element);
+    if (!task_group_update(task_group))
+        return NULL;
+
+    return task_group;
+}
+
+void task_group_add_task(Task *task_group, Task *element)
+{
+    if (!task_group)
+        return;
+    if (!element)
+        return;
+    while (element->group)
+        task_group_remove_task(NULL, element);
+    remove_area(&element->area);
+    element->area.parent = NULL;
+    add_area(&element->area, &task_group->group_menu->area);
+    element->group = task_group;
+    element->area._is_under_mouse = group_menu_task_is_under_mouse;
+    task_group_update_recursive(task_group);
+    sort_taskbar_for_win(element->win);
+}
+
+void task_group_remove_task(Task *task_group, Task *element)
+{
+    if (!element)
+        return;
+    if (!task_group)
+        task_group = element->group;
+    if (!task_group)
+        return;
+    if (element->group != task_group)
+        return;
+    remove_area(&element->area);
+    element->area.parent = NULL;  // Is this the proper way to do it?
+    add_area(&element->area, task_group->area.parent);
+    element->area._is_under_mouse = task_group->area._is_under_mouse;
+    element->group = task_group->group;
+    element->area.posx = ((Panel *)element->area.panel)->g_task.area.posx;
+    element->area.posy = ((Panel *)element->area.panel)->g_task.area.posy;
+    element->area.width = ((Panel *)element->area.panel)->g_task.area.width;
+    element->area.height = ((Panel *)element->area.panel)->g_task.area.height;
+    task_group_update_recursive(task_group);
+    sort_taskbar_for_win(element->win);
+}
+
+GList *task_get_containing_list(Task *task)
+{
+    Area *parent = task->area.parent;
+    GList *l0 = parent->children;
+    if (!task->group && taskbarname_enabled)
+        l0 = l0->next;
+    return l0;
+}
+
+void *task_get_taskbar(Task *task)
+{
+    while (task->group) {
+        TaskGroupMenu *menu = task->area.parent;
+        task = menu->group;
+    }
+    Taskbar *taskbar = task->area.parent;
+    return taskbar;
 }
 
 gboolean task_update_title(Task *task)
@@ -293,6 +560,7 @@ gboolean task_update_title(Task *task)
         for (int i = 0; i < task_buttons->len; ++i) {
             Task *task2 = g_ptr_array_index(task_buttons, i);
             task2->title = task->title;
+            task_group_update_recursive(task2->group);
             schedule_redraw(&task2->area);
         }
     }
@@ -434,6 +702,7 @@ void task_update_icon(Task *task)
                 task2->icon_hover[k] = task->icon_hover[k];
                 task2->icon_press[k] = task->icon_press[k];
             }
+            task_group_update_recursive(task2->group);
             schedule_redraw(&task2->area);
         }
     }
@@ -489,7 +758,7 @@ void draw_task(void *obj, cairo_t *c)
         pango_layout_set_font_description(layout, panel->g_task.font_desc);
         pango_layout_set_text(layout, task->title, -1);
 
-        pango_layout_set_width(layout, (((Taskbar *)task->area.parent)->text_width + TINT2_PANGO_SLACK) * PANGO_SCALE);
+        pango_layout_set_width(layout, (((Taskbar *)task_get_taskbar(task))->text_width + TINT2_PANGO_SLACK) * PANGO_SCALE);
         pango_layout_set_height(layout, panel->g_task.text_height * PANGO_SCALE);
         pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
         pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
@@ -591,15 +860,22 @@ Task *find_active_task(Task *current_task)
     if (active_task == NULL)
         return current_task;
 
-    Taskbar *taskbar = (Taskbar *)current_task->area.parent;
+    Taskbar *taskbar = task_get_taskbar(current_task);
 
     GList *l0 = taskbar->area.children;
     if (taskbarname_enabled)
         l0 = l0->next;
+
+    GList dummy;
+
     for (; l0; l0 = l0->next) {
         Task *task = (Task *)l0->data;
-        if (task->win == active_task->win)
-            return task;
+        if (task->win == active_task->win) {
+            if (!task->is_group)
+                return task;
+            dummy.next = *task->group_tasks;
+            l0 = &dummy;
+        }
     }
 
     return current_task;
@@ -610,17 +886,23 @@ Task *next_task(Task *task)
     if (!task)
         return NULL;
 
-    Taskbar *taskbar = task->area.parent;
-
-    GList *l0 = taskbar->area.children;
-    if (taskbarname_enabled)
-        l0 = l0->next;
+    GList *l0 = task_get_containing_list(task);
     GList *lfirst_task = l0;
     for (; l0; l0 = l0->next) {
         Task *task1 = l0->data;
         if (task1 == task) {
-            l0 = l0->next ? l0->next : lfirst_task;
-            return l0->data;
+            if (l0->next)
+                // Next node exists -> select it
+                l0 = l0->next;
+            else if (!task->group)
+                // On the root level select the first node
+                l0 = lfirst_task;
+            else
+                // On other levels find the next leaf from the parent node
+                return next_task(task->group);
+
+            task1 = l0->data;
+            return task_group_first_task(task1);
         }
     }
 
@@ -632,26 +914,55 @@ Task *prev_task(Task *task)
     if (!task)
         return 0;
 
-    Taskbar *taskbar = task->area.parent;
-
     Task *task2 = NULL;
-    GList *l0 = taskbar->area.children;
-    if (taskbarname_enabled)
-        l0 = l0->next;
+    GList *l0 = task_get_containing_list(task);
     GList *lfirst_task = l0;
     for (; l0; l0 = l0->next) {
         Task *task1 = l0->data;
         if (task1 == task) {
             if (l0 == lfirst_task) {
+                // The current task is first child
+                if (task->group)
+                    // On non-root levels find the prev leaf from the parent node
+                    return prev_task(task->group);
+
+                // On the root level select the last sibling
                 l0 = g_list_last(l0);
                 task2 = l0->data;
             }
-            return task2;
+            // task2 contains the previous sibling or the last root sibling
+
+            return task_group_last_task(task2);
         }
+        // The current task is not the first child -> remember previous sibling
         task2 = task1;
     }
 
     return NULL;
+}
+
+Task *task_group_first_task(Task *task)
+{
+    if (!task)
+        return NULL;
+
+    while (task->is_group) {
+        GList *l = *task->group_tasks;
+        task = l->data;
+    }
+    return task;
+}
+
+Task *task_group_last_task(Task *task)
+{
+    if (!task)
+        return NULL;
+
+    while (task->is_group) {
+        GList *l = g_list_last(*task->group_tasks);
+        task = l->data;
+    }
+    return task;
 }
 
 void reset_active_task()
@@ -719,13 +1030,14 @@ void set_task_state(Task *task, TaskState state)
 
     if (state == TASK_ACTIVE && task->current_state != state) {
         clock_gettime(CLOCK_MONOTONIC, &task->last_activation_time);
+        task_group_update_recursive(task->group);
         if (taskbar_sort_method == TASKBAR_SORT_LRU || taskbar_sort_method == TASKBAR_SORT_MRU) {
             GPtrArray *task_buttons = get_task_buttons(task->win);
             if (task_buttons) {
                 for (int i = 0; i < task_buttons->len; ++i) {
                     Task *task1 = g_ptr_array_index(task_buttons, i);
-                    Taskbar *taskbar = (Taskbar *)task1->area.parent;
-                    sort_tasks(taskbar);
+                    TaskbarOrGroupMenu *taskbar = task_get_taskbar(task1);
+                    sort_tasks(taskbar, TRUE);
                 }
             }
         }
@@ -744,7 +1056,7 @@ void set_task_state(Task *task, TaskState state)
                 if (state == TASK_ACTIVE && g_slist_find(urgent_list, task1))
                     del_urgent(task1);
                 gboolean hide = FALSE;
-                Taskbar *taskbar = (Taskbar *)task1->area.parent;
+                Taskbar *taskbar = task_get_taskbar(task1);
                 if (task->desktop == ALL_DESKTOPS && server.desktop != taskbar->desktop) {
                     // Hide ALL_DESKTOPS task on non-current desktop
                     hide = !always_show_all_desktop_tasks;
@@ -771,6 +1083,8 @@ void set_task_state(Task *task, TaskState state)
                     p->taskbar->area.resize_needed = TRUE;
                     p->area.resize_needed = TRUE;
                 }
+                task_group_update_recursive(task1->group);
+                sort_taskbar_for_win(task1->win);
             }
             schedule_panel_redraw();
         }
@@ -884,7 +1198,66 @@ void task_handle_mouse_event(Task *task, MouseAction action)
     case PREV_TASK: {
         Task *task1 = prev_task(find_active_task(task));
         activate_window(task1->win);
-    }
+    } break;
+    case TOGGLE_GROUP_MENU: {
+        Task *task_group = task;
+        if (!task_group->is_group) {
+            task_group = task->group;
+            if (!task_group)
+                break;
+        }
+        TaskGroupMenu *group_menu = task_group->group_menu;
+        if (!group_menu) {
+            fprintf(stderr, RED "tint2: taskbar: task group without menu pointer\n");
+            break;
+        }
+        if (group_menu->mapped)
+            task_group_menu_hide(group_menu);
+        else
+            task_group_menu_show(group_menu);
+    } break;
+    case GROUP_NEXT_TASK: {
+        if (task->win != active_task->win) {
+            activate_window(task->win);
+            break;
+        }
+        Task *active = find_active_task(task);
+        if (active == NULL)
+            break;
+        Task *task1;
+        if (active == task_group_last_task(task))
+            task1 = task_group_first_task(task);
+        else
+            task1 = next_task(active);
+        activate_window(task1->win);
+    } break;
+    case GROUP_PREV_TASK: {
+        if (task->win != active_task->win) {
+            activate_window(task->win);
+            break;
+        }
+        Task *active = find_active_task(task);
+        if (active == NULL)
+            break;
+        Task *task1;
+        if (active == task_group_first_task(task))
+            task1 = task_group_last_task(task);
+        else
+            task1 = prev_task(active);
+        activate_window(task1->win);
+    } break;
+    case TOGGLE_GROUPABLE: {
+        if (task->grouping_enabled) {
+            while (task->group) {
+                task_group_remove_task(NULL, task);
+            }
+            task->grouping_enabled = False;
+        } else {
+            task->grouping_enabled = True;
+            group_taskbuttons_for_win(task->win);
+            sort_taskbar_for_win(task->win);
+        }
+    } break;
     }
 }
 

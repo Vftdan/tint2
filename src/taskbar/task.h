@@ -13,6 +13,7 @@
 
 #include "common.h"
 #include "timer.h"
+#include "taskgroupmenu.h"
 
 typedef enum TaskState {
     TASK_NORMAL = 0,
@@ -49,6 +50,7 @@ typedef struct GlobalTask {
     gboolean tooltip_enabled;
     gboolean thumbnail_enabled;
     int thumbnail_width;
+    gboolean grouping_enabled;
 } GlobalTask;
 
 // Stores information about a task.
@@ -83,6 +85,15 @@ typedef struct Task {
     int _icon_y;
     cairo_surface_t *thumbnail;
     double thumbnail_last_update;
+
+    gboolean is_group;
+    gboolean grouping_enabled;
+    struct Task *group;
+    // Only make sense with is_group=true:
+    GList **group_tasks;
+    TaskGroupMenu *group_menu;
+    gpointer group_lookup_key;
+    guint group_last_index;
 } Task;
 
 extern Timer urgent_timer;
@@ -90,6 +101,14 @@ extern GSList *urgent_list;
 
 Task *add_task(Window win);
 void remove_task(Task *task);
+
+Task *add_task_group(Task *element, int monitor, int desktop, gpointer lookup_key);
+void task_group_add_task(Task *group, Task *element);
+void task_group_remove_task(Task *group, Task *element);
+void remove_task_group(gpointer task_group);
+
+GList *task_get_containing_list(Task *task);
+void *task_get_taskbar(Task *task);
 
 void draw_task(void *obj, cairo_t *c);
 void on_change_task(void *obj);
@@ -109,6 +128,8 @@ Task *find_active_task(Task *current_task);
 
 Task *next_task(Task *task);
 Task *prev_task(Task *task);
+Task *task_group_first_task(Task *task);
+Task *task_group_last_task(Task *task);
 
 void add_urgent(Task *task);
 void del_urgent(Task *task);

@@ -45,6 +45,11 @@ MouseAction mouse_scroll_up;
 MouseAction mouse_scroll_down;
 MouseAction mouse_tilt_left;
 MouseAction mouse_tilt_right;
+MouseAction group_mouse_left;
+MouseAction group_mouse_middle;
+MouseAction group_mouse_right;
+MouseAction group_mouse_scroll_up;
+MouseAction group_mouse_scroll_down;
 
 TaskbarMode taskbar_mode;
 gboolean wm_menu;
@@ -1034,13 +1039,22 @@ Taskbar *click_taskbar(Panel *panel, int x, int y)
     return NULL;
 }
 
-Task *click_task(Panel *panel, int x, int y)
+Task *click_task(Panel *panel, int x, int y, Window win)
 {
-    Taskbar *taskbar = click_taskbar(panel, x, y);
-    if (taskbar) {
-        GList *l = taskbar->area.children;
-        if (taskbarname_enabled)
-            l = l->next;
+    GList *task_list = NULL;
+    if (win == panel->main_win) {
+        Taskbar *taskbar = click_taskbar(panel, x, y);
+        if (taskbar)
+            task_list = taskbar->area.children;
+        if (task_list && taskbarname_enabled)
+            task_list = task_list->next;
+    } else {
+        TaskGroupMenu *group_menu = task_group_menu_from_xwin(win);
+        if (group_menu)
+            task_list = group_menu->area.children;
+    }
+    if (task_list) {
+        GList *l = task_list;
         for (; l; l = l->next) {
             Task *task = (Task *)l->data;
             if (area_is_under_mouse(task, x, y)) {
@@ -1241,6 +1255,8 @@ void _schedule_panel_redraw(const char *file, const char *function, const int li
     if (debug_fps) {
         fprintf(stderr, YELLOW "tint2: %s %s %d: triggering panel redraw" RESET "\n", file, function, line);
     }
+    for (GList *l = task_group_menus; l; l = l->next)
+        ((TaskGroupMenu *)l->data)->dirty = TRUE;
 }
 
 void save_panel_screenshot(const Panel *panel, const char *path)
