@@ -51,7 +51,7 @@ GtkWidget *taskbar_name_padding_x, *taskbar_name_padding_y, *taskbar_name_inacti
 GtkWidget *taskbar_name_font, *taskbar_name_font_set;
 GtkWidget *taskbar_active_background, *taskbar_inactive_background;
 GtkWidget *taskbar_name_active_background, *taskbar_name_inactive_background;
-GtkWidget *taskbar_distribute_size, *taskbar_sort_order, *taskbar_alignment, *taskbar_always_show_all_desktop_tasks;
+GtkWidget *taskbar_distribute_size, *taskbar_sort_order, *taskbar_group, *taskbar_alignment, *taskbar_always_show_all_desktop_tasks;
 GtkWidget *taskbar_hide_empty;
 
 // task
@@ -72,6 +72,10 @@ GtkWidget *task_urgent_blinks;
 GtkWidget *task_iconified_color, *task_iconified_color_set, *task_iconified_icon_opacity, *task_iconified_icon_osb_set,
     *task_iconified_icon_saturation, *task_iconified_icon_brightness, *task_iconified_background,
     *task_iconified_background_set;
+GtkWidget *task_group_mouse_left, *task_group_mouse_middle, *task_group_mouse_right, *task_group_mouse_scroll_up, *task_group_mouse_scroll_down;
+GtkWidget *task_default_groupable, *group_menu_background;
+GtkWidget *group_menu_padding_x, *group_menu_padding_y, *group_menu_spacing;
+GtkWidget *group_menu_direction;
 
 // clock
 GtkWidget *clock_format_line1, *clock_format_line2, *clock_tmz_line1, *clock_tmz_line2;
@@ -2725,6 +2729,29 @@ void create_taskbar(GtkWidget *parent)
 
     row++;
     col = 2;
+    label = gtk_label_new(_("Task grouping"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    taskbar_group = gtk_combo_box_text_new();
+    gtk_widget_show(taskbar_group);
+    gtk_table_attach(GTK_TABLE(table), taskbar_group, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(taskbar_group), _("Disabled"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(taskbar_group), _("By application"));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(taskbar_group), 0);
+    gtk_tooltips_set_tip(tooltips,
+                         taskbar_group,
+                         _("Specifies how tasks should be collapsed into groups. \n"
+                           "'Disabled' means that each task will have a separate top-level button. \n"
+                           "'By application' means that tasks with the same "
+                           "application name will be collapsed into a single top-level button."),
+                         NULL);
+
+    row++;
+    col = 2;
     label = gtk_label_new(_("Task alignment"));
     gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
     gtk_widget_show(label);
@@ -3062,6 +3089,10 @@ void create_task(GtkWidget *parent)
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_left), _("Desktop right"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_left), _("Next task"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_left), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_left), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_left), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_left), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_left), _("Toggle groupable"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(task_mouse_left), 5);
     gtk_tooltips_set_tip(tooltips,
                          task_mouse_left,
@@ -3076,7 +3107,11 @@ void create_task(GtkWidget *parent)
                            "'Desktop left' sends the task to the previous desktop. \n"
                            "'Desktop right' sends the task to the next desktop. \n"
                            "'Next task' sends the focus to the next task. \n"
-                           "'Previous task' sends the focus to the previous task."),
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
                          NULL);
 
     row++, col = 2;
@@ -3101,6 +3136,10 @@ void create_task(GtkWidget *parent)
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_up), _("Desktop right"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_up), _("Next task"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_up), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_up), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_up), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_up), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_up), _("Toggle groupable"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(task_mouse_scroll_up), 0);
     gtk_tooltips_set_tip(tooltips,
                          task_mouse_scroll_up,
@@ -3115,7 +3154,11 @@ void create_task(GtkWidget *parent)
                            "'Desktop left' sends the task to the previous desktop. \n"
                            "'Desktop right' sends the task to the next desktop. \n"
                            "'Next task' sends the focus to the next task. \n"
-                           "'Previous task' sends the focus to the previous task."),
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
                          NULL);
 
     row++, col = 2;
@@ -3140,6 +3183,10 @@ void create_task(GtkWidget *parent)
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_middle), _("Desktop right"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_middle), _("Next task"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_middle), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_middle), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_middle), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_middle), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_middle), _("Toggle groupable"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(task_mouse_middle), 0);
     gtk_tooltips_set_tip(tooltips,
                          task_mouse_middle,
@@ -3154,7 +3201,11 @@ void create_task(GtkWidget *parent)
                            "'Desktop left' sends the task to the previous desktop. \n"
                            "'Desktop right' sends the task to the next desktop. \n"
                            "'Next task' sends the focus to the next task. \n"
-                           "'Previous task' sends the focus to the previous task."),
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
                          NULL);
 
     row++, col = 2;
@@ -3179,6 +3230,10 @@ void create_task(GtkWidget *parent)
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_down), _("Desktop right"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_down), _("Next task"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_down), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_down), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_down), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_down), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_scroll_down), _("Toggle groupable"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(task_mouse_scroll_down), 0);
     gtk_tooltips_set_tip(tooltips,
                          task_mouse_scroll_down,
@@ -3193,7 +3248,11 @@ void create_task(GtkWidget *parent)
                            "'Desktop left' sends the task to the previous desktop. \n"
                            "'Desktop right' sends the task to the next desktop. \n"
                            "'Next task' sends the focus to the next task. \n"
-                           "'Previous task' sends the focus to the previous task."),
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
                          NULL);
 
     row++, col = 2;
@@ -3218,6 +3277,10 @@ void create_task(GtkWidget *parent)
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_right), _("Desktop right"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_right), _("Next task"));
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_right), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_right), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_right), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_right), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_mouse_right), _("Toggle groupable"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(task_mouse_right), 1);
     gtk_tooltips_set_tip(tooltips,
                          task_mouse_right,
@@ -3232,7 +3295,260 @@ void create_task(GtkWidget *parent)
                            "'Desktop left' sends the task to the previous desktop. \n"
                            "'Desktop right' sends the task to the next desktop. \n"
                            "'Next task' sends the focus to the next task. \n"
-                           "'Previous task' sends the focus to the previous task."),
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
+                         NULL);
+
+    change_paragraph(parent);
+
+    label = gtk_label_new(_("<b>Group mouse events</b>"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_label_set_use_markup(GTK_LABEL(label), TRUE);
+    gtk_widget_show(label);
+    gtk_box_pack_start(GTK_BOX(parent), label, FALSE, FALSE, 0);
+
+    table = gtk_table_new(3, 10, FALSE);
+    gtk_widget_show(table);
+    gtk_box_pack_start(GTK_BOX(parent), table, FALSE, FALSE, 0);
+    gtk_table_set_row_spacings(GTK_TABLE(table), ROW_SPACING);
+    gtk_table_set_col_spacings(GTK_TABLE(table), COL_SPACING);
+    row = 0, col = 2;
+
+    label = gtk_label_new(_("Left click"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    task_group_mouse_left = gtk_combo_box_text_new();
+    gtk_widget_show(task_group_mouse_left);
+    gtk_table_attach(GTK_TABLE(table), task_group_mouse_left, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("None"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Close"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Toggle"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Shade"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Toggle or iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Maximize or restore"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Desktop left"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Desktop right"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_left), _("Toggle groupable"));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(task_group_mouse_left), 5);
+    gtk_tooltips_set_tip(tooltips,
+                         task_group_mouse_left,
+                         _("Specifies the action performed when task group buttons receive a left click event: \n"
+                           "'None' means that no action is taken. \n"
+                           "'Close' closes the task. \n"
+                           "'Toggle' toggles the task. \n"
+                           "'Iconify' iconifies (minimizes) the task. \n"
+                           "'Shade' shades (collapses) the task. \n"
+                           "'Toggle or iconify' toggles or iconifies the task. \n"
+                           "'Maximize or restore' maximizes or minimizes the task. \n"
+                           "'Desktop left' sends the task to the previous desktop. \n"
+                           "'Desktop right' sends the task to the next desktop. \n"
+                           "'Next task' sends the focus to the next task. \n"
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
+                         NULL);
+
+    row++, col = 2;
+    label = gtk_label_new(_("Wheel scroll up"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    task_group_mouse_scroll_up = gtk_combo_box_text_new();
+    gtk_widget_show(task_group_mouse_scroll_up);
+    gtk_table_attach(GTK_TABLE(table), task_group_mouse_scroll_up, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("None"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Close"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Toggle"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Shade"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Toggle or iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Maximize or restore"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Desktop left"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Desktop right"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_up), _("Toggle groupable"));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(task_group_mouse_scroll_up), 0);
+    gtk_tooltips_set_tip(tooltips,
+                         task_group_mouse_scroll_up,
+                         _("Specifies the action performed when task group buttons receive a scroll up event: \n"
+                           "'None' means that no action is taken. \n"
+                           "'Close' closes the task. \n"
+                           "'Toggle' toggles the task. \n"
+                           "'Iconify' iconifies (minimizes) the task. \n"
+                           "'Shade' shades (collapses) the task. \n"
+                           "'Toggle or iconify' toggles or iconifies the task. \n"
+                           "'Maximize or restore' maximizes or minimizes the task. \n"
+                           "'Desktop left' sends the task to the previous desktop. \n"
+                           "'Desktop right' sends the task to the next desktop. \n"
+                           "'Next task' sends the focus to the next task. \n"
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
+                         NULL);
+
+    row++, col = 2;
+    label = gtk_label_new(_("Middle click"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    task_group_mouse_middle = gtk_combo_box_text_new();
+    gtk_widget_show(task_group_mouse_middle);
+    gtk_table_attach(GTK_TABLE(table), task_group_mouse_middle, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("None"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Close"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Toggle"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Shade"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Toggle or iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Maximize or restore"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Desktop left"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Desktop right"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_middle), _("Toggle groupable"));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(task_group_mouse_middle), 0);
+    gtk_tooltips_set_tip(tooltips,
+                         task_group_mouse_middle,
+                         _("Specifies the action performed when task group buttons receive a middle click event: \n"
+                           "'None' means that no action is taken. \n"
+                           "'Close' closes the task. \n"
+                           "'Toggle' toggles the task. \n"
+                           "'Iconify' iconifies (minimizes) the task. \n"
+                           "'Shade' shades (collapses) the task. \n"
+                           "'Toggle or iconify' toggles or iconifies the task. \n"
+                           "'Maximize or restore' maximizes or minimizes the task. \n"
+                           "'Desktop left' sends the task to the previous desktop. \n"
+                           "'Desktop right' sends the task to the next desktop. \n"
+                           "'Next task' sends the focus to the next task. \n"
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
+                         NULL);
+
+    row++, col = 2;
+    label = gtk_label_new(_("Wheel scroll down"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    task_group_mouse_scroll_down = gtk_combo_box_text_new();
+    gtk_widget_show(task_group_mouse_scroll_down);
+    gtk_table_attach(GTK_TABLE(table), task_group_mouse_scroll_down, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("None"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Close"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Toggle"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Shade"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Toggle or iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Maximize or restore"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Desktop left"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Desktop right"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_scroll_down), _("Toggle groupable"));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(task_group_mouse_scroll_down), 0);
+    gtk_tooltips_set_tip(tooltips,
+                         task_group_mouse_scroll_down,
+                         _("Specifies the action performed when task group buttons receive a scroll down event: \n"
+                           "'None' means that no action is taken. \n"
+                           "'Close' closes the task. \n"
+                           "'Toggle' toggles the task. \n"
+                           "'Iconify' iconifies (minimizes) the task. \n"
+                           "'Shade' shades (collapses) the task. \n"
+                           "'Toggle or iconify' toggles or iconifies the task. \n"
+                           "'Maximize or restore' maximizes or minimizes the task. \n"
+                           "'Desktop left' sends the task to the previous desktop. \n"
+                           "'Desktop right' sends the task to the next desktop. \n"
+                           "'Next task' sends the focus to the next task. \n"
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
+                         NULL);
+
+    row++, col = 2;
+    label = gtk_label_new(_("Right click"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    task_group_mouse_right = gtk_combo_box_text_new();
+    gtk_widget_show(task_group_mouse_right);
+    gtk_table_attach(GTK_TABLE(table), task_group_mouse_right, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("None"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Close"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Toggle"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Shade"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Toggle or iconify"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Maximize or restore"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Desktop left"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Desktop right"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Toggle group menu"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Group next task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Group previous task"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(task_group_mouse_right), _("Toggle groupable"));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(task_group_mouse_right), 1);
+    gtk_tooltips_set_tip(tooltips,
+                         task_group_mouse_right,
+                         _("Specifies the action performed when task group buttons receive a right click event: \n"
+                           "'None' means that no action is taken. \n"
+                           "'Close' closes the task. \n"
+                           "'Toggle' toggles the task. \n"
+                           "'Iconify' iconifies (minimizes) the task. \n"
+                           "'Shade' shades (collapses) the task. \n"
+                           "'Toggle or iconify' toggles or iconifies the task. \n"
+                           "'Maximize or restore' maximizes or minimizes the task. \n"
+                           "'Desktop left' sends the task to the previous desktop. \n"
+                           "'Desktop right' sends the task to the next desktop. \n"
+                           "'Next task' sends the focus to the next task. \n"
+                           "'Previous task' sends the focus to the previous task. \n"
+                           "'Toggle group menu' shows or hides this task group task list menu. \n"
+                           "'Group next task' sends the focus to the last active or next task inside this group. \n"
+                           "'Group previous task' sends the focus to the last active or previous task inside this group. \n"
+                           "'Toggle groupable' toggles the task's ability to belong to a task group."),
                          NULL);
 
     change_paragraph(parent);
@@ -3243,7 +3559,7 @@ void create_task(GtkWidget *parent)
     gtk_widget_show(label);
     gtk_box_pack_start(GTK_BOX(parent), label, FALSE, FALSE, 0);
 
-    table = gtk_table_new(4, 13, FALSE);
+    table = gtk_table_new(4, 14, FALSE);
     gtk_widget_show(table);
     gtk_box_pack_start(GTK_BOX(parent), table, FALSE, FALSE, 0);
     gtk_table_set_row_spacings(GTK_TABLE(table), ROW_SPACING);
@@ -3437,6 +3753,22 @@ void create_task(GtkWidget *parent)
     g_signal_connect(GTK_OBJECT(task_font_set), "toggled", GTK_SIGNAL_FUNC(font_set_callback), task_font);
     font_set_callback(task_font_set, task_font);
 
+    row++, col = 2;
+    label = gtk_label_new(_("Grouping"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    task_default_groupable = gtk_check_button_new();
+    gtk_widget_show(task_default_groupable);
+    gtk_table_attach(GTK_TABLE(table), task_default_groupable, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_tooltips_set_tip(tooltips,
+                         task_default_groupable,
+                         _("If enabled and task grouping method set, tasks will be automatically collapsed into groups."),
+                         NULL);
+
     change_paragraph(parent);
 
     notebook = gtk_notebook_new();
@@ -3499,6 +3831,109 @@ void create_task(GtkWidget *parent)
                        &task_iconified_icon_brightness,
                        &task_iconified_background,
                        &task_iconified_background_set);
+
+    label = gtk_label_new(_("<b>Taks group task list menu appearance</b>"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_label_set_use_markup(GTK_LABEL(label), TRUE);
+    gtk_widget_show(label);
+    gtk_box_pack_start(GTK_BOX(parent), label, FALSE, FALSE, 0);
+
+    table = gtk_table_new(4, 5, FALSE);
+    gtk_widget_show(table);
+    gtk_box_pack_start(GTK_BOX(parent), table, FALSE, FALSE, 0);
+    gtk_table_set_row_spacings(GTK_TABLE(table), ROW_SPACING);
+    gtk_table_set_col_spacings(GTK_TABLE(table), COL_SPACING);
+    row = 0, col = 2;
+
+    label = gtk_label_new(_("Background"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    group_menu_background = create_background_combo(_("Group menu"));
+    gtk_widget_show(group_menu_background);
+    gtk_table_attach(GTK_TABLE(table), group_menu_background, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_tooltips_set_tip(tooltips,
+                         group_menu_background,
+                         _("Selects the background used to display task group task list menus. "
+                           "Backgrounds can be edited in the Backgrounds tab."),
+                         NULL);
+
+    row++;
+    col = 2;
+    label = gtk_label_new(_("Horizontal padding"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    group_menu_padding_x = gtk_spin_button_new_with_range(0, 500, 1);
+    gtk_widget_show(group_menu_padding_x);
+    gtk_table_attach(GTK_TABLE(table), group_menu_padding_x, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_tooltips_set_tip(tooltips,
+                         group_menu_padding_x,
+                         _("Specifies the horizontal padding of task group task list menus. "
+                           "This is the space between the border and the content inside."),
+                         NULL);
+
+    row++;
+    col = 2;
+    label = gtk_label_new(_("Vertical padding"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    group_menu_padding_y = gtk_spin_button_new_with_range(0, 500, 1);
+    gtk_widget_show(group_menu_padding_y);
+    gtk_table_attach(GTK_TABLE(table), group_menu_padding_y, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_tooltips_set_tip(tooltips,
+                         group_menu_padding_y,
+                         _("Specifies the vertical padding of task group task list menus. "
+                           "This is the space between the border and the content inside."),
+                         NULL);
+
+    row++;
+    col = 2;
+    label = gtk_label_new(_("Spacing"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    group_menu_spacing = gtk_spin_button_new_with_range(0, 500, 1);
+    gtk_widget_show(group_menu_spacing);
+    gtk_table_attach(GTK_TABLE(table), group_menu_spacing, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_widget_set_tooltip_text(group_menu_spacing, _("Specifies the spacing between the elements inside task group task list menus ."));
+
+    row++;
+    col = 2;
+    label = gtk_label_new(_("Direction"));
+    gtk_misc_set_alignment(GTK_MISC(label), 0, 0);
+    gtk_widget_show(label);
+    gtk_table_attach(GTK_TABLE(table), label, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+
+    group_menu_direction = gtk_combo_box_text_new();
+    gtk_widget_show(group_menu_direction);
+    gtk_table_attach(GTK_TABLE(table), group_menu_direction, col, col + 1, row, row + 1, GTK_FILL, 0, 0, 0);
+    col++;
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(group_menu_direction), _("Vertical"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(group_menu_direction), _("Horizontal"));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(group_menu_direction), 0);
+    gtk_tooltips_set_tip(tooltips,
+                         group_menu_direction,
+                         _("Specifies the orientation of task group task list menus. \n"
+                           "'Vertical' means that task buttons will be placed one under another. \n"
+                           "'Horizontal' means that tasks buttons will be placed side by side. "),
+                         NULL);
+
+    change_paragraph(parent);
 }
 
 void task_status_toggle_button_callback(GtkWidget *widget, gpointer data)

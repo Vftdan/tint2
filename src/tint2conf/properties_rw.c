@@ -470,6 +470,16 @@ void config_write_taskbar(FILE *fp)
     }
     fprintf(fp, "\n");
 
+    fprintf(fp, "taskbar_group = ");
+    if (gtk_combo_box_get_active(GTK_COMBO_BOX(taskbar_group)) <= 0) {
+        fprintf(fp, "disabled");
+    } else if (gtk_combo_box_get_active(GTK_COMBO_BOX(taskbar_group)) == 1) {
+        fprintf(fp, "application");
+    } else {
+        fprintf(fp, "disabled");
+    }
+    fprintf(fp, "\n");
+
     fprintf(fp, "task_align = ");
     if (gtk_combo_box_get_active(GTK_COMBO_BOX(taskbar_alignment)) <= 0) {
         fprintf(fp, "left");
@@ -540,6 +550,7 @@ void config_write_task(FILE *fp)
     fprintf(fp,
             "task_thumbnail_size = %d\n",
             (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(tooltip_task_thumbnail_size)));
+    fprintf(fp, "task_default_groupable = %d\n", gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(task_default_groupable)) ? 1 : 0);
 
 
     // same for: "" _normal _active _urgent _iconified
@@ -618,6 +629,29 @@ void config_write_task(FILE *fp)
     fprintf(fp, "mouse_right = %s\n", get_action(task_mouse_right));
     fprintf(fp, "mouse_scroll_up = %s\n", get_action(task_mouse_scroll_up));
     fprintf(fp, "mouse_scroll_down = %s\n", get_action(task_mouse_scroll_down));
+
+    fprintf(fp, "group_mouse_left = %s\n", get_action(task_group_mouse_left));
+    fprintf(fp, "group_mouse_middle = %s\n", get_action(task_group_mouse_middle));
+    fprintf(fp, "group_mouse_right = %s\n", get_action(task_group_mouse_right));
+    fprintf(fp, "group_mouse_scroll_up = %s\n", get_action(task_group_mouse_scroll_up));
+    fprintf(fp, "group_mouse_scroll_down = %s\n", get_action(task_group_mouse_scroll_down));
+
+    fprintf(fp, "group_menu_background_id = %d\n", gtk_combo_box_get_active(GTK_COMBO_BOX(group_menu_background)));
+    fprintf(fp,
+            "group_menu_outer_padding = %d %d\n",
+            (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(group_menu_padding_x)),
+            (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(group_menu_padding_y)));
+    fprintf(fp,
+            "group_menu_spacing = %d\n",
+            (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(group_menu_spacing)));
+
+    fprintf(fp, "group_menu_direction = ");
+    if (gtk_combo_box_get_active(GTK_COMBO_BOX(group_menu_direction)) <= 0) {
+        fprintf(fp, "vertical");
+    } else {
+        fprintf(fp, "horizontal");
+    }
+    fprintf(fp, "\n");
 
     fprintf(fp, "\n");
 }
@@ -1584,6 +1618,13 @@ void add_entry(char *key, char *value)
             gtk_combo_box_set_active(GTK_COMBO_BOX(taskbar_sort_order), 5);
         else
             gtk_combo_box_set_active(GTK_COMBO_BOX(taskbar_sort_order), 0);
+    } else if (strcmp(key, "taskbar_group") == 0) {
+        if (strcmp(value, "disabled") == 0)
+            gtk_combo_box_set_active(GTK_COMBO_BOX(taskbar_group), 0);
+        else if (strcmp(value, "application") == 0)
+            gtk_combo_box_set_active(GTK_COMBO_BOX(taskbar_group), 1);
+        else
+            gtk_combo_box_set_active(GTK_COMBO_BOX(taskbar_group), 0);
     } else if (strcmp(key, "task_align") == 0) {
         if (strcmp(value, "left") == 0)
             gtk_combo_box_set_active(GTK_COMBO_BOX(taskbar_alignment), 0);
@@ -1786,6 +1827,8 @@ void add_entry(char *key, char *value)
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(tooltip_task_thumbnail), atoi(value));
     else if (strcmp(key, "task_thumbnail_size") == 0)
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(tooltip_task_thumbnail_size), MAX(8, atoi(value)));
+    else if (strcmp(key, "task_default_groupable") == 0)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(task_default_groupable), atoi(value));
 
     /* Systray */
     else if (strcmp(key, "systray") == 0) {
@@ -1926,6 +1969,37 @@ void add_entry(char *key, char *value)
         set_action(value, task_mouse_scroll_up);
     } else if (strcmp(key, "mouse_scroll_down") == 0) {
         set_action(value, task_mouse_scroll_down);
+    } else if (strcmp(key, "group_mouse_left") == 0) {
+        set_action(value, task_group_mouse_left);
+    } else if (strcmp(key, "group_mouse_middle") == 0) {
+        set_action(value, task_group_mouse_middle);
+    } else if (strcmp(key, "group_mouse_right") == 0) {
+        set_action(value, task_group_mouse_right);
+    } else if (strcmp(key, "group_mouse_scroll_up") == 0) {
+        set_action(value, task_group_mouse_scroll_up);
+    } else if (strcmp(key, "group_mouse_scroll_down") == 0) {
+        set_action(value, task_group_mouse_scroll_down);
+    } else if (strcmp(key, "group_menu_background_id") == 0) {
+        int id = background_index_safe(atoi(value));
+        gtk_combo_box_set_active(GTK_COMBO_BOX(group_menu_background), id);
+    } else if (strcmp(key, "group_menu_outer_padding") == 0) {
+        // FIXME make padding & spacing configuration syntax consistent with those of other elements
+        char **tokens = g_strsplit(value, " ", 2);
+        if (tokens[0]) {
+            gtk_spin_button_set_value(GTK_SPIN_BUTTON(group_menu_padding_x), atoi(tokens[0]));
+            if (tokens[1])
+                gtk_spin_button_set_value(GTK_SPIN_BUTTON(group_menu_padding_y), atoi(tokens[1]));
+        }
+        g_strfreev(tokens);
+    } else if (strcmp(key, "group_menu_spacing") == 0) {
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(group_menu_spacing), atoi(value));
+    } else if (strcmp(key, "group_menu_direction") == 0) {
+        if (strcmp(value, "vertical") == 0)
+            gtk_combo_box_set_active(GTK_COMBO_BOX(group_menu_direction), 0);
+        else if (strcmp(value, "horizontal") == 0)
+            gtk_combo_box_set_active(GTK_COMBO_BOX(group_menu_direction), 1);
+        else
+            gtk_combo_box_set_active(GTK_COMBO_BOX(group_menu_direction), 0);
     }
 
     /* Separator */
@@ -2124,6 +2198,14 @@ void set_action(char *event, GtkWidget *combo)
         gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 9);
     else if (strcmp(event, "prev_task") == 0)
         gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 10);
+    else if (strcmp(event, "toggle_group_menu") == 0)
+        gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 11);
+    else if (strcmp(event, "group_next_task") == 0)
+        gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 12);
+    else if (strcmp(event, "group_prev_task") == 0)
+        gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 13);
+    else if (strcmp(event, "toggle_groupable") == 0)
+        gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 14);
 }
 
 char *get_action(GtkWidget *combo)
@@ -2150,5 +2232,13 @@ char *get_action(GtkWidget *combo)
         return "next_task";
     if (gtk_combo_box_get_active(GTK_COMBO_BOX(combo)) == 10)
         return "prev_task";
+    if (gtk_combo_box_get_active(GTK_COMBO_BOX(combo)) == 11)
+        return "toggle_group_menu";
+    if (gtk_combo_box_get_active(GTK_COMBO_BOX(combo)) == 12)
+        return "group_next_task";
+    if (gtk_combo_box_get_active(GTK_COMBO_BOX(combo)) == 13)
+        return "group_prev_task";
+    if (gtk_combo_box_get_active(GTK_COMBO_BOX(combo)) == 14)
+        return "toggle_groupable";
     return "none";
 }

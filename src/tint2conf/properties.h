@@ -56,7 +56,7 @@ extern GtkWidget *taskbar_name_padding_x, *taskbar_name_padding_y, *taskbar_name
 extern GtkWidget *taskbar_name_font, *taskbar_name_font_set;
 extern GtkWidget *taskbar_active_background, *taskbar_inactive_background;
 extern GtkWidget *taskbar_name_active_background, *taskbar_name_inactive_background;
-extern GtkWidget *taskbar_distribute_size, *taskbar_sort_order, *taskbar_alignment,
+extern GtkWidget *taskbar_distribute_size, *taskbar_sort_order, *taskbar_group, *taskbar_alignment,
     *taskbar_always_show_all_desktop_tasks;
 extern GtkWidget *taskbar_hide_empty;
 
@@ -79,6 +79,11 @@ extern GtkWidget *task_urgent_blinks;
 extern GtkWidget *task_iconified_color, *task_iconified_color_set, *task_iconified_icon_opacity,
     *task_iconified_icon_osb_set, *task_iconified_icon_saturation, *task_iconified_icon_brightness,
     *task_iconified_background, *task_iconified_background_set;
+extern GtkWidget *task_group_mouse_left, *task_group_mouse_middle, *task_group_mouse_right, *task_group_mouse_scroll_up,
+    *task_group_mouse_scroll_down;
+extern GtkWidget *task_default_groupable, *group_menu_background;
+extern GtkWidget *group_menu_padding_x, *group_menu_padding_y, *group_menu_spacing;
+extern GtkWidget *group_menu_direction;
 
 // clock
 extern GtkWidget *clock_format_line1, *clock_format_line2, *clock_tmz_line1, *clock_tmz_line2;
