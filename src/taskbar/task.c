@@ -124,6 +124,13 @@ Task *add_task(Window win)
         XFree(classhint);
     }
 
+    gboolean grouping_enabled = panels[monitor].g_task.grouping_enabled;
+    gulong *grouping_enabled_property = server_get_property(win, server.atom._TINT2_TASK_GROUPABLE, XA_CARDINAL, NULL);
+    if (grouping_enabled_property) {
+       grouping_enabled = *grouping_enabled_property != 0;
+       XFree(grouping_enabled_property);
+    }
+
     GPtrArray *task_buttons = g_ptr_array_new();
     for (int j = 0; j < panels[monitor].num_desktops; j++) {
         if (task_template.desktop != ALL_DESKTOPS && task_template.desktop != j)
@@ -164,7 +171,7 @@ Task *add_task(Window win)
         }
         task_instance->icon_width = task_template.icon_width;
         task_instance->icon_height = task_template.icon_height;
-        task_instance->grouping_enabled = panels[monitor].g_task.grouping_enabled;
+        task_instance->grouping_enabled = grouping_enabled;
 
         add_area(&task_instance->area, &taskbar->area);
         g_ptr_array_add(task_buttons, task_instance);
@@ -1257,6 +1264,15 @@ void task_handle_mouse_event(Task *task, MouseAction action)
             group_taskbuttons_for_win(task->win);
             sort_taskbar_for_win(task->win);
         }
+        gulong grouping_enabled_cardinal = task->grouping_enabled;
+        XChangeProperty(server.display,
+                        task->win,
+                        server.atom._TINT2_TASK_GROUPABLE,
+                        XA_CARDINAL,
+                        32,
+                        PropModeReplace,
+                        (unsigned char *)&grouping_enabled_cardinal,
+                        1);
     } break;
     }
 }

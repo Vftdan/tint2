@@ -122,6 +122,9 @@ void server_init_atoms()
     server.atom.XdndActionCopy = XInternAtom(server.display, "XdndActionCopy", False);
     server.atom.XdndFinished = XInternAtom(server.display, "XdndFinished", False);
     server.atom.TARGETS = XInternAtom(server.display, "TARGETS", False);
+
+    // custom
+    server.atom._TINT2_TASK_GROUPABLE = XInternAtom(server.display, "_TINT2_TASK_GROUPABLE", False);
 }
 
 const char *GetAtomName(Display *disp, Atom a)

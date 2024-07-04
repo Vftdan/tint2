@@ -91,6 +91,7 @@ typedef struct Global_atom {
     Atom XdndActionCopy;
     Atom XdndFinished;
     Atom TARGETS;
+    Atom _TINT2_TASK_GROUPABLE;
 } Global_atom;
 
 typedef struct Property {
