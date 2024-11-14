@@ -10,6 +10,7 @@
 #include <X11/Xlib.h>
 #include <cairo.h>
 #include <cairo-xlib.h>
+#include <pango/pangocairo.h>
 
 #include "color.h"
 #include "gradient.h"
